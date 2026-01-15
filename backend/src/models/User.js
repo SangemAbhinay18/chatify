@@ -6,23 +6,35 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      lowercase: true,
+      trim: true,
+      index: true,
     },
+
     fullName: {
       type: String,
       required: true,
+      trim: true,
     },
+
     password: {
       type: String,
       required: true,
       minlength: 6,
     },
+
     profilePic: {
       type: String,
       default: "",
     },
   },
-  { timestamps: true } // createdAt & updatedAt
+  {
+    timestamps: true,
+  }
 );
+
+// Ensure indexes match schema
+userSchema.set("autoIndex", true);
 
 const User = mongoose.model("User", userSchema);
 

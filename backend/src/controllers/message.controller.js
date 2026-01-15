@@ -106,3 +106,37 @@ export const getChatPartners = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+export const deleteChat = async (req, res) => {
+  try {
+    const loggedInUserId = req.user._id;
+    const { id: chatPartnerId } = req.params;
+
+    // Validate that chatPartnerId is a valid MongoDB ObjectId
+    if (!chatPartnerId || !chatPartnerId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: "Invalid chat partner ID" });
+    }
+
+    // Check if the chat partner exists
+    const chatPartnerExists = await User.exists({ _id: chatPartnerId });
+    if (!chatPartnerExists) {
+      return res.status(404).json({ message: "Chat partner not found" });
+    }
+
+    // Delete all messages between the two users
+    const result = await Message.deleteMany({
+      $or: [
+        { senderId: loggedInUserId, receiverId: chatPartnerId },
+        { senderId: chatPartnerId, receiverId: loggedInUserId },
+      ],
+    });
+
+    res.status(200).json({
+      message: "Chat deleted successfully",
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("Error in deleteChat controller: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};

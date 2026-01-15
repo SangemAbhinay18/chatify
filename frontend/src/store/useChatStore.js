@@ -110,4 +110,19 @@ export const useChatStore = create((set, get) => ({
     const socket = useAuthStore.getState().socket;
     socket.off("newMessage");
   },
+
+  deleteChat: async (chatPartnerId) => {
+    try {
+      await axiosInstance.delete(`/messages/${chatPartnerId}`);
+      
+      // Update the chats list by removing the deleted chat
+      const updatedChats = get().chats.filter((chat) => chat._id !== chatPartnerId);
+      set({ chats: updatedChats, selectedUser: null, messages: [] });
+      
+      toast.success("Chat deleted successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete chat");
+      throw error;
+    }
+  },
 }));
