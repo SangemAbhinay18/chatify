@@ -4,12 +4,12 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import { ENV } from "./env.js";
-import User from "../models/User.js";
 
 const app = express();
-app.use(cookieParser());
-
 const server = http.createServer(app);
+
+// userId -> socketId
+const userSocketMap = {};
 
 const io = new Server(server, {
   cors: {
@@ -18,28 +18,23 @@ const io = new Server(server, {
   },
 });
 
-// Track online users
-const onlineUsers = new Map();
+// ✅ EXPORT THIS FUNCTION
+export const getReceiverSocketId = (receiverId) => {
+  return userSocketMap[receiverId];
+};
 
-// Socket auth middleware
-io.use(async (socket, next) => {
+io.use((socket, next) => {
   try {
-    const cookie = socket.request.headers.cookie;
-    if (!cookie) return next(new Error("No auth cookie"));
-
-    const token = cookie
-      .split("; ")
-      .find((c) => c.startsWith("jwt="))
+    const token = socket.handshake.headers.cookie
+      ?.split("; ")
+      .find((row) => row.startsWith("jwt="))
       ?.split("=")[1];
 
-    if (!token) return next(new Error("No token"));
+    if (!token) return next(new Error("Unauthorized"));
 
     const decoded = jwt.verify(token, ENV.JWT_SECRET);
+    socket.userId = decoded.userId;
 
-    const user = await User.findById(decoded.id).select("-password");
-    if (!user) return next(new Error("User not found"));
-
-    socket.user = user;
     next();
   } catch (err) {
     next(new Error("Unauthorized"));
@@ -47,31 +42,16 @@ io.use(async (socket, next) => {
 });
 
 io.on("connection", (socket) => {
-  const userId = socket.user._id.toString();
+  const userId = socket.userId;
+  userSocketMap[userId] = socket.id;
 
-  onlineUsers.set(userId, socket.id);
-
-  // Broadcast online users
-  io.emit("online-users", Array.from(onlineUsers.keys()));
-
-  console.log("User connected:", socket.user.fullName);
-
-  socket.on("send-message", ({ receiverId, message }) => {
-    const receiverSocket = onlineUsers.get(receiverId);
-
-    if (receiverSocket) {
-      io.to(receiverSocket).emit("receive-message", {
-        senderId: userId,
-        message,
-      });
-    }
-  });
+  // send online users
+  io.emit("getOnlineUsers", Object.keys(userSocketMap));
 
   socket.on("disconnect", () => {
-    onlineUsers.delete(userId);
-    io.emit("online-users", Array.from(onlineUsers.keys()));
-    console.log("User disconnected:", socket.user.fullName);
+    delete userSocketMap[userId];
+    io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });
 });
 
-export { app, server, io };
+export { io, app, server };
