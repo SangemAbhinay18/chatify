@@ -1,45 +1,77 @@
 import { Server } from "socket.io";
 import http from "http";
 import express from "express";
+import cookieParser from "cookie-parser";
+import jwt from "jsonwebtoken";
 import { ENV } from "./env.js";
-import { socketAuthMiddleware } from "../middleware/socket.auth.middleware.js";
+import User from "../models/User.js";
 
 const app = express();
+app.use(cookieParser());
+
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: [ENV.CLIENT_URL],
+    origin: "https://chatify-mauve-nine.vercel.app",
     credentials: true,
   },
 });
 
-// apply authentication middleware to all socket connections
-io.use(socketAuthMiddleware);
+// Track online users
+const onlineUsers = new Map();
 
-// we will use this function to check if the user is online or not
-export function getReceiverSocketId(userId) {
-  return userSocketMap[userId];
-}
+// Socket auth middleware
+io.use(async (socket, next) => {
+  try {
+    const cookie = socket.request.headers.cookie;
+    if (!cookie) return next(new Error("No auth cookie"));
 
-// this is for storig online users
-const userSocketMap = {}; // {userId:socketId}
+    const token = cookie
+      .split("; ")
+      .find((c) => c.startsWith("jwt="))
+      ?.split("=")[1];
+
+    if (!token) return next(new Error("No token"));
+
+    const decoded = jwt.verify(token, ENV.JWT_SECRET);
+
+    const user = await User.findById(decoded.id).select("-password");
+    if (!user) return next(new Error("User not found"));
+
+    socket.user = user;
+    next();
+  } catch (err) {
+    next(new Error("Unauthorized"));
+  }
+});
 
 io.on("connection", (socket) => {
-  console.log("A user connected", socket.user.fullName);
+  const userId = socket.user._id.toString();
 
-  const userId = socket.userId;
-  userSocketMap[userId] = socket.id;
+  onlineUsers.set(userId, socket.id);
 
-  // io.emit() is used to send events to all connected clients
-  io.emit("getOnlineUsers", Object.keys(userSocketMap));
+  // Broadcast online users
+  io.emit("online-users", Array.from(onlineUsers.keys()));
 
-  // with socket.on we listen for events from clients
+  console.log("User connected:", socket.user.fullName);
+
+  socket.on("send-message", ({ receiverId, message }) => {
+    const receiverSocket = onlineUsers.get(receiverId);
+
+    if (receiverSocket) {
+      io.to(receiverSocket).emit("receive-message", {
+        senderId: userId,
+        message,
+      });
+    }
+  });
+
   socket.on("disconnect", () => {
-    console.log("A user disconnected", socket.user.fullName);
-    delete userSocketMap[userId];
-    io.emit("getOnlineUsers", Object.keys(userSocketMap));
+    onlineUsers.delete(userId);
+    io.emit("online-users", Array.from(onlineUsers.keys()));
+    console.log("User disconnected:", socket.user.fullName);
   });
 });
 
-export { io, app, server };
+export { app, server, io };
