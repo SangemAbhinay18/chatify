@@ -56,10 +56,11 @@ app.use(express.json({ limit: "5mb" }));
 
 app.use(
   cors({
-    origin: ENV.CLIENT_URL,
+    origin: "https://chatify-mauve-nine.vercel.app",
     credentials: true,
   })
 );
+
 
 app.use(cookieParser());
 

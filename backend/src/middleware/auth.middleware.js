@@ -4,8 +4,7 @@ import { ENV } from "../lib/env.js";
 
 export const protectRoute = async (req, res, next) => {
   try {
-    // ✅ MUST match generateToken()
-    const token = req.cookies.token;
+    const token = req.cookies.jwt;
 
     if (!token) {
       return res.status(401).json({ message: "Unauthorized - No token provided" });
@@ -13,7 +12,6 @@ export const protectRoute = async (req, res, next) => {
 
     const decoded = jwt.verify(token, ENV.JWT_SECRET);
 
-    // decoded.id because we signed { id: userId }
     const user = await User.findById(decoded.id).select("-password");
 
     if (!user) {
@@ -23,7 +21,7 @@ export const protectRoute = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    console.error("Error in protectRoute middleware:", error);
-    res.status(401).json({ message: "Unauthorized - Invalid or expired token" });
+    console.error("Auth error:", error);
+    res.status(401).json({ message: "Unauthorized - Invalid token" });
   }
 };
