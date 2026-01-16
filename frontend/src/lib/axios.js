@@ -1,9 +1,11 @@
-import axios from "axios";
+import { io } from "socket.io-client";
 
-export const axiosInstance = axios.create({
-  baseURL:
-    import.meta.env.MODE === "development"
-      ? "http://localhost:3000/api"
-      : "https://chatify-7om8.onrender.com/api",
-  withCredentials: true,
-});
+export const socket = io(
+  import.meta.env.MODE === "development"
+    ? "http://localhost:3000"
+    : "https://chatify-7om8.onrender.com",
+  {
+    withCredentials: true, // 🔴 REQUIRED
+    transports: ["websocket"], // 🔴 Prevent polling issues
+  }
+);
