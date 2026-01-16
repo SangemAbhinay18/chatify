@@ -25,12 +25,16 @@ export const getReceiverSocketId = (receiverId) => {
 
 io.use((socket, next) => {
   try {
-    const token = socket.handshake.headers.cookie
-      ?.split("; ")
-      .find((row) => row.startsWith("jwt="))
+    const cookie = socket.handshake.headers.cookie;
+    if (!cookie) return next(new Error("No cookie"));
+
+    const token = cookie
+      .split(";")
+      .map(c => c.trim())
+      .find(c => c.startsWith("jwt="))
       ?.split("=")[1];
 
-    if (!token) return next(new Error("Unauthorized"));
+    if (!token) return next(new Error("No token"));
 
     const decoded = jwt.verify(token, ENV.JWT_SECRET);
     socket.userId = decoded.userId;
@@ -40,6 +44,7 @@ io.use((socket, next) => {
     next(new Error("Unauthorized"));
   }
 });
+
 
 io.on("connection", (socket) => {
   const userId = socket.userId;
